@@ -1,0 +1,17 @@
+services:
+  querybee:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL:-postgresql://querybee:querybee_password@postgres:5432/querybee}
+    restart: unless-stopped
+    networks:
+      - querybee-network
+
+networks:
+  querybee-network:
+    driver: bridge
