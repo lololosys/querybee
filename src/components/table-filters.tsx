@@ -58,9 +58,12 @@ export function TableFilters({ columns, filters, onFiltersChange, isLoading }: T
     (searchTerm: string) => {
       const currentFilters = filtersRef.current;
       if (!searchTerm.trim()) {
-        // Clear all search filters but keep manual filters
-        const manualFilters = currentFilters.filter(f => !f.column.startsWith('_global_search_'));
-        onFiltersChange(manualFilters);
+        // Only clear global search filters if any exist; otherwise, do nothing
+        const hasGlobalFilters = currentFilters.some(f => f.column.startsWith('_global_search_'));
+        if (hasGlobalFilters) {
+          const manualFilters = currentFilters.filter(f => !f.column.startsWith('_global_search_'));
+          onFiltersChange(manualFilters);
+        }
         return;
       }
 

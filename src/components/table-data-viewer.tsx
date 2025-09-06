@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,8 +33,6 @@ function TableDataViewerComponent({ connectionId, tableName, schemaName }: Table
   const [isSaving, setIsSaving] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [filters, setFilters] = useState<FilterCondition[]>([]);
-  const fetchTableDataRef = useRef<((page?: number, currentFilters?: FilterCondition[]) => Promise<void>) | undefined>(undefined);
-  const editingCellRef = useRef<EditingCell | null>(null);
 
   const fetchTableData = useCallback(async (page: number = 0, currentFilters: FilterCondition[] = []) => {
     setIsLoading(true);
@@ -58,42 +56,40 @@ function TableDataViewerComponent({ connectionId, tableName, schemaName }: Table
     }
   }, [connectionId, tableName, schemaName]);
 
-  // Update refs to latest values
-  useEffect(() => {
-    fetchTableDataRef.current = fetchTableData;
-  }, [fetchTableData]);
-
-  // Update editingCell ref without causing re-renders
-  editingCellRef.current = editingCell;
+  // No refs required
 
   useEffect(() => {
     if (connectionId && tableName && schemaName) {
-      fetchTableData(0, []);
       setCurrentPage(0);
+      fetchTableData(0, []);
     }
-  }, [connectionId, tableName, schemaName, fetchTableData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionId, tableName, schemaName]);
 
   const handleFiltersChange = useCallback((newFilters: FilterCondition[]) => {
+    // Avoid redundant updates and fetches if filters didn't actually change
+    const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
+    if (!filtersChanged) return;
     setFilters(newFilters);
     setCurrentPage(0);
-    fetchTableDataRef.current?.(0, newFilters);
-  }, []);
+    fetchTableData(0, newFilters);
+  }, [filters, fetchTableData]);
 
   const nextPage = useCallback(() => {
     if (tableData && (currentPage + 1) * pageSize < (tableData.filteredCount !== undefined ? tableData.filteredCount : tableData.totalCount)) {
       const newPage = currentPage + 1;
       setCurrentPage(newPage);
-      fetchTableDataRef.current?.(newPage, filters);
+      fetchTableData(newPage, filters);
     }
-  }, [tableData, currentPage, pageSize, filters]);
+  }, [tableData, currentPage, pageSize, filters, fetchTableData]);
 
   const prevPage = useCallback(() => {
     if (currentPage > 0) {
       const newPage = currentPage - 1;
       setCurrentPage(newPage);
-      fetchTableDataRef.current?.(newPage, filters);
+      fetchTableData(newPage, filters);
     }
-  }, [currentPage, filters]);
+  }, [currentPage, filters, fetchTableData]);
 
   const handleCellClick = useCallback((rowIndex: number, columnName: string, currentValue: unknown) => {
     setEditingCell({
@@ -105,13 +101,7 @@ function TableDataViewerComponent({ connectionId, tableName, schemaName }: Table
   }, []);
 
   const handleCellChange = useCallback((newValue: string) => {
-    const currentEditingCell = editingCellRef.current;
-    if (currentEditingCell) {
-      setEditingCell({
-        ...currentEditingCell,
-        newValue
-      });
-    }
+    setEditingCell((prev) => (prev ? { ...prev, newValue } : prev));
   }, []);
 
   const cancelEdit = useCallback(() => {
