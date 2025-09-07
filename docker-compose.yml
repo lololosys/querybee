@@ -4,10 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL:-postgresql://querybee:querybee_password@postgres:5432/querybee}
+      - DATABASE_URL=postgresql://dvur12:87654321@localhost:5432/formswrite}
     restart: unless-stopped
     networks:
       - querybee-network
