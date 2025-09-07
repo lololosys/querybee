@@ -1,30 +1,34 @@
 # QueryBee 🐝
 
-A cloud-based SaaS platform that makes database management effortless. Connect your PostgreSQL databases in seconds, view, edit, and manage your data through a beautiful, intuitive interface—without writing a single line of code.
+A cloud-based SaaS platform that makes database management effortless. Connect to any database in seconds, view, edit, and manage your data through a beautiful, intuitive interface—without writing a single line of code.
 
 ## Features
 
-- **Lightning Fast** - Connect to PostgreSQL databases in seconds
+- **Lightning Fast** - Connect to databases in seconds
 - **Auto-Connect** - Automatic connection using DATABASE_URL environment variable
 - **Secure & Safe** - Confirmation dialogs before data changes
 - **User Friendly** - No SQL knowledge required, visual data management
 - **Real-time Editing** - Click to edit cells directly in the table
 - **Schema Explorer** - Browse all tables and their structures
+- **Advanced Filtering** - Search and filter data with powerful tools
+- **Mobile Optimized** - Responsive design that works on all devices
 - **Pagination** - Handle large datasets efficiently
+- **Docker Ready** - Easy deployment with Docker and Docker Compose
 
 ## Tech Stack
 
 - **Frontend**: Next.js 15, React, TypeScript
 - **UI Components**: Shadcn/ui, Tailwind CSS
-- **Database**: PostgreSQL with `pg` driver
+- **Database**: Universal database support with `pg` driver
 - **Icons**: Lucide React
+- **Deployment**: Docker, Docker Compose
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- PostgreSQL database (local or remote)
+- Any supported database (PostgreSQL, MySQL, etc.)
 
 ### Installation
 
@@ -51,8 +55,6 @@ cp .env.example .env.local
 
 ```env
 DATABASE_URL="postgresql://username:password@localhost:5432/database_name"
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="your-secret-key-change-this-in-production"
 ```
 
 5. Start the development server:
@@ -73,7 +75,7 @@ npm run dev
 
 ### Option 2: Manual Connection
 
-1. **Connect to Database**: Enter your PostgreSQL connection details
+1. **Connect to Database**: Enter your database connection details
 2. **Test Connection**: Verify your credentials before connecting
 3. **Connect**: Establish the database connection
 
@@ -106,6 +108,20 @@ QueryBee also supports manual connection with the following parameters:
 - **Username**: Database username
 - **Password**: Database password
 
+### Docker Deployment
+
+QueryBee comes with Docker support for easy deployment:
+
+```bash
+# Build and run with Docker Compose
+docker compose up --build
+
+# Access the application
+open http://localhost:3000
+```
+
+See the included `docker-compose.yml` and `Dockerfile` for more deployment options.
+
 ## Security Features
 
 - Connection testing before establishing database connections
@@ -136,11 +152,11 @@ src/
 
 ### API Endpoints
 
-- `POST /api/database/test` - Test database connection
 - `POST /api/database/connect` - Establish database connection
+- `POST /api/database/connect-env` - Connect using environment variables
 - `DELETE /api/database/connect` - Close database connection
 - `GET /api/database/tables` - Get list of tables
-- `GET /api/database/table-data` - Get table data with pagination
+- `GET /api/database/table-data` - Get table data with pagination and filtering
 - `PUT /api/database/table-data` - Update table data
 
 ## Contributing
