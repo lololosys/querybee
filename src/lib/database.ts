@@ -49,7 +49,10 @@ export class DatabaseManager {
         password: config.password,
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 10000,
+        ssl: {
+          rejectUnauthorized: false, // Required for DigitalOcean managed databases
+        },
       });
 
       // Test the connection
