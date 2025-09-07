@@ -74,9 +74,18 @@ export function MobileTableViewer({ connectionId, tableName, schemaName }: Mobil
     // Avoid redundant updates and fetches if filters didn't actually change
     const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
     if (!filtersChanged) return;
-    setFilters(newFilters);
+    
+    // Filter out empty filters that don't have values
+    const validFilters = newFilters.filter(filter => {
+      if (['is_null', 'is_not_null'].includes(filter.operator)) {
+        return true; // These don't need values
+      }
+      return filter.value && filter.value.toString().trim() !== '';
+    });
+    
+    setFilters(validFilters);
     setCurrentPage(0);
-    fetchTableData(0, newFilters);
+    fetchTableData(0, validFilters);
   }, [filters, fetchTableData]);
 
   const handleCellEdit = useCallback((rowIndex: number, columnName: string, currentValue: unknown) => {
@@ -249,51 +258,65 @@ export function MobileTableViewer({ connectionId, tableName, schemaName }: Mobil
               {tableData.filteredCount !== undefined && tableData.filteredCount !== tableData.totalCount && (
                 <span className="block text-blue-600 text-xs">(filtered from {tableData.totalCount} total)</span>
               )}
+              <div className="text-xs text-gray-500 mt-1">
+                💡 Scroll to view more entries
+              </div>
             </CardDescription>
           </CardHeader>
         <CardContent>
           {/* Mobile Card Layout */}
-          <div className="space-y-3">
+          <div className="overflow-auto max-h-[70vh] min-h-[400px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pb-6">
+            <div className="space-y-6 px-2">
             {tableData.rows.map((row, rowIndex) => {
               const displayColumns = tableData.columns.slice(0, 3); // Show first 3 columns
               
               return (
                 <Card 
                   key={rowIndex} 
-                  className="cursor-pointer hover:shadow-md active:scale-[0.98] transition-all border-l-4 border-l-blue-500 touch-manipulation"
+                  className="cursor-pointer hover:shadow-lg active:scale-[0.98] transition-all border-l-4 border-l-blue-500 touch-manipulation"
                   onClick={() => openRowDetails(rowIndex)}
                 >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <Badge variant="outline" className="text-xs">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <Badge variant="outline" className="text-sm px-3 py-1.5">
                         Row {startRow + rowIndex}
                       </Badge>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Button variant="ghost" size="sm" className="h-10 w-10 p-0">
                         <Eye className="h-4 w-4" />
                       </Button>
                     </div>
                     
-                    <div className="space-y-2">
+                    <div className="space-y-5">
                       {displayColumns.map((column) => {
                         const value = row[column.column_name];
                         return (
-                          <div key={column.column_name} className="flex justify-between items-center">
-                            <span className="text-sm font-medium text-gray-600 min-w-0 flex-1">
-                              {column.column_name}:
-                            </span>
-                            <span className="text-sm text-gray-900 min-w-0 flex-1 text-right">
-                              {value === null ? (
-                                <span className="text-gray-400 italic">NULL</span>
-                              ) : (
-                                <span className="font-mono">{truncateValue(value, 30)}</span>
-                              )}
-                            </span>
+                          <div key={column.column_name} className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-gray-700">
+                                {column.column_name}
+                              </span>
+                              <Badge 
+                                variant="secondary" 
+                                className={`text-xs px-2 py-1 ${getDataTypeColor(column.data_type)}`}
+                              >
+                                {column.data_type}
+                              </Badge>
+                            </div>
+                            <div className="p-3 bg-gray-50 rounded-lg border min-h-[48px] flex items-center">
+                              <span className="text-sm text-gray-900 w-full">
+                                {value === null ? (
+                                  <span className="text-gray-400 italic">NULL</span>
+                                ) : (
+                                  <span className="font-mono break-words">{truncateValue(value, 50)}</span>
+                                )}
+                              </span>
+                            </div>
                           </div>
                         );
                       })}
                       
                       {tableData.columns.length > 3 && (
-                        <div className="text-xs text-gray-500 pt-1">
+                        <div className="text-sm text-gray-500 pt-4 border-t border-gray-200 mt-4">
                           +{tableData.columns.length - 3} more fields
                         </div>
                       )}
@@ -302,6 +325,7 @@ export function MobileTableViewer({ connectionId, tableName, schemaName }: Mobil
                 </Card>
               );
             })}
+            </div>
           </div>
 
           {/* Pagination */}
@@ -343,77 +367,90 @@ export function MobileTableViewer({ connectionId, tableName, schemaName }: Mobil
           </SheetHeader>
           
           {selectedRow !== null && tableData && (
-            <div className="mt-6 space-y-4">
+            <div className="mt-6 space-y-6">
               {tableData.columns.map((column) => {
                 const value = tableData.rows[selectedRow][column.column_name];
                 const isEditing = editingCell?.rowIndex === selectedRow && 
                                  editingCell?.columnName === column.column_name;
                 
                 return (
-                  <div key={column.column_name} className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{column.column_name}</span>
+                  <div key={column.column_name} className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-base font-semibold text-gray-800">{column.column_name}</span>
                       <Badge 
                         variant="secondary" 
-                        className={`text-xs ${getDataTypeColor(column.data_type)}`}
+                        className={`text-sm px-3 py-1 ${getDataTypeColor(column.data_type)}`}
                       >
                         {column.data_type}
                       </Badge>
                     </div>
                     
                     {isEditing ? (
-                      <div className="space-y-3">
-                        {column.data_type.includes('text') || 
-                         (typeof editingCell.newValue === 'string' && editingCell.newValue.length > 50) ? (
-                          <Textarea
-                            value={editingCell.newValue}
-                            onChange={(e) => handleCellChange(e.target.value)}
-                            className="min-h-[100px] resize-none"
-                            placeholder="Enter value..."
-                          />
-                        ) : (
-                          <Input
-                            value={editingCell.newValue}
-                            onChange={(e) => handleCellChange(e.target.value)}
-                            className="text-sm"
-                            placeholder="Enter value..."
-                          />
-                        )}
+                      <div className="space-y-6 p-6 bg-blue-50 border-2 border-blue-200 rounded-xl shadow-sm">
+                        <div className="space-y-5">
+                          <div className="flex items-center gap-3">
+                            <span className="text-base font-semibold text-blue-800">Editing Field:</span>
+                            <Badge variant="secondary" className="text-sm px-3 py-1">
+                              {column.data_type}
+                            </Badge>
+                          </div>
+                          
+                          {column.data_type.includes('text') || 
+                           (typeof editingCell.newValue === 'string' && editingCell.newValue.length > 50) ? (
+                            <Textarea
+                              value={editingCell.newValue}
+                              onChange={(e) => handleCellChange(e.target.value)}
+                              className="min-h-[140px] resize-none text-base p-4"
+                              placeholder="Enter value..."
+                              autoFocus
+                            />
+                          ) : (
+                            <Input
+                              value={editingCell.newValue}
+                              onChange={(e) => handleCellChange(e.target.value)}
+                              className="h-14 text-base px-4"
+                              placeholder="Enter value..."
+                              autoFocus
+                            />
+                          )}
+                        </div>
                         
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-4 pt-2">
                           <Button
                             size="sm"
                             onClick={confirmSave}
                             disabled={isSaving}
-                            className="flex-1"
+                            className="flex-1 h-14 bg-green-600 hover:bg-green-700 text-white font-medium text-base"
                           >
-                            <Save className="h-4 w-4 mr-2" />
-                            {isSaving ? 'Saving...' : 'Save'}
+                            <Save className="h-5 w-5 mr-3" />
+                            {isSaving ? 'Saving...' : 'Save Changes'}
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={cancelEdit}
-                            className="flex-1"
+                            className="flex-1 h-14 font-medium text-base"
                           >
-                            <X className="h-4 w-4 mr-2" />
+                            <X className="h-5 w-5 mr-3" />
                             Cancel
                           </Button>
                         </div>
                       </div>
                     ) : (
                       <div
-                        className="p-3 border rounded-md bg-gray-50 cursor-pointer hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[48px] flex items-center justify-between group touch-manipulation"
+                        className="p-4 border-2 border-gray-200 rounded-xl bg-gray-50 cursor-pointer hover:bg-gray-100 active:bg-gray-200 transition-colors min-h-[72px] flex items-center justify-between group touch-manipulation"
                         onClick={() => handleCellEdit(selectedRow, column.column_name, value)}
                       >
-                        <span className="text-sm font-mono flex-1">
-                          {value === null ? (
-                            <span className="text-gray-400 italic">NULL</span>
-                          ) : (
-                            String(value)
-                          )}
-                        </span>
-                        <Edit3 className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-base font-mono block break-words">
+                            {value === null ? (
+                              <span className="text-gray-400 italic">NULL</span>
+                            ) : (
+                              String(value)
+                            )}
+                          </span>
+                        </div>
+                        <Edit3 className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0 ml-3" />
                       </div>
                     )}
                   </div>

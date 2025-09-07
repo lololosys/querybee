@@ -46,61 +46,62 @@ const getOperatorsForDataType = (dataType: string) => {
 export function TableFilters({ columns, filters, onFiltersChange, isLoading }: TableFiltersProps) {
   const [quickSearch, setQuickSearch] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const filtersRef = useRef(filters);
+  const [isSearching, setIsSearching] = useState(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Update ref when filters change
-  useEffect(() => {
-    filtersRef.current = filters;
-  }, [filters]);
-
-  // Debounced search function
+  // Debounced search function with better logic
   const debouncedSearch = useCallback(
     (searchTerm: string) => {
-      const currentFilters = filtersRef.current;
-      if (!searchTerm.trim()) {
-        // Only clear global search filters if any exist; otherwise, do nothing
-        const hasGlobalFilters = currentFilters.some(f => f.column.startsWith('_global_search_'));
-        if (hasGlobalFilters) {
-          const manualFilters = currentFilters.filter(f => !f.column.startsWith('_global_search_'));
-          onFiltersChange(manualFilters);
-        }
-        return;
+      // Clear existing timer
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
 
-      // Create a global search filter that searches all searchable columns
-      const searchableColumns = columns.filter(col => 
-        col.data_type.includes('text') || 
-        col.data_type.includes('varchar') || 
-        col.data_type.includes('char') ||
-        col.data_type.includes('int') ||
-        col.data_type.includes('numeric')
-      );
+      // Set loading state
+      setIsSearching(true);
 
-      // Use a special global search approach - we'll build a combined OR condition
-      const globalSearchFilter: FilterCondition = {
-        column: '_global_search_' + searchableColumns.map(c => c.column_name).join('_'),
-        operator: 'contains',
-        value: searchTerm
-      };
+      debounceTimerRef.current = setTimeout(() => {
+        const trimmedSearch = searchTerm.trim();
+        
+        // Get current manual filters (non-global search)
+        const manualFilters = filters.filter(f => !f.column.startsWith('_global_search_'));
+        
+        if (!trimmedSearch) {
+          // Clear search - only update if there were global search filters
+          const hasGlobalFilters = filters.some(f => f.column.startsWith('_global_search_'));
+          if (hasGlobalFilters) {
+            onFiltersChange(manualFilters);
+          }
+        } else {
+          // Create global search filter
+          const searchableColumns = columns.filter(col => 
+            col.data_type.includes('text') || 
+            col.data_type.includes('varchar') || 
+            col.data_type.includes('char') ||
+            col.data_type.includes('int') ||
+            col.data_type.includes('numeric')
+          );
 
-      // Keep only manual filters (remove any existing global search)
-      const manualFilters = currentFilters.filter(f => !f.column.startsWith('_global_search_'));
-      onFiltersChange([...manualFilters, globalSearchFilter]);
+          if (searchableColumns.length > 0) {
+            const globalSearchFilter: FilterCondition = {
+              column: '_global_search_' + searchableColumns.map(c => c.column_name).join('_'),
+              operator: 'contains',
+              value: trimmedSearch
+            };
+
+            onFiltersChange([...manualFilters, globalSearchFilter]);
+          }
+        }
+        
+        setIsSearching(false);
+      }, 500); // Increased debounce time for better performance
     },
-    [columns, onFiltersChange]
+    [columns, filters, onFiltersChange]
   );
-
-  // Debounce effect
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      debouncedSearch(quickSearch);
-    }, 300); // 300ms delay
-
-    return () => clearTimeout(timer);
-  }, [quickSearch, debouncedSearch]);
 
   const handleQuickSearchChange = (searchTerm: string) => {
     setQuickSearch(searchTerm);
+    debouncedSearch(searchTerm);
   };
 
   const addFilter = () => {
@@ -116,6 +117,11 @@ export function TableFilters({ columns, filters, onFiltersChange, isLoading }: T
   };
 
   const updateFilter = (index: number, updatedFilter: Partial<FilterCondition>) => {
+    // Don't update if the filter value is empty and requires a value
+    if (!updatedFilter.value && ['equals', 'contains', 'starts_with', 'ends_with', 'greater_than', 'less_than'].includes(updatedFilter.operator || '')) {
+      return;
+    }
+
     const globalSearchFilters = filters.filter(f => f.column.startsWith('_global_search_'));
     const manualFilters = filters.filter(f => !f.column.startsWith('_global_search_'));
     const newManualFilters = [...manualFilters];
@@ -134,7 +140,20 @@ export function TableFilters({ columns, filters, onFiltersChange, isLoading }: T
     setQuickSearch('');
     onFiltersChange([]);
     setShowAdvancedFilters(false);
+    // Clear any pending debounced search
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const manualFilters = filters.filter(f => !f.column.startsWith('_global_search_'));
   const activeFiltersCount = manualFilters.length;
@@ -154,16 +173,25 @@ export function TableFilters({ columns, filters, onFiltersChange, isLoading }: T
       <CardContent className="space-y-4">
         {/* Quick Search */}
         <div className="space-y-2">
-          <Label htmlFor="quick-search">Quick Search</Label>
+          <Label htmlFor="quick-search" className="text-sm font-medium">
+            Quick Search
+          </Label>
           <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            {isSearching && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600"></div>
+              </div>
+            )}
             <Input
               id="quick-search"
               placeholder="Search in all columns..."
               value={quickSearch}
               onChange={(e) => handleQuickSearchChange(e.target.value)}
-              className="pl-8"
+              className="pl-10 pr-10 h-10 text-base" // Larger touch target for mobile
               disabled={isLoading}
+              autoComplete="off"
+              spellCheck="false"
             />
           </div>
         </div>
@@ -194,101 +222,107 @@ export function TableFilters({ columns, filters, onFiltersChange, isLoading }: T
         )}
 
         {/* Advanced Filters */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className="text-xs"
+              className="text-sm h-9 px-4 w-full sm:w-auto"
             >
-              Advanced Filters
+              {showAdvancedFilters ? 'Hide' : 'Show'} Advanced Filters
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={addFilter}
-              className="text-xs"
+              className="text-sm h-9 px-4 w-full sm:w-auto"
             >
-              <Plus className="h-3 w-3 mr-1" />
+              <Plus className="h-4 w-4 mr-2" />
               Add Filter
             </Button>
           </div>
 
           {showAdvancedFilters && manualFilters.length > 0 && (
-            <div className="space-y-3 border rounded-md p-3 bg-gray-50">
+            <div className="space-y-4 border rounded-lg p-4 bg-gray-50">
               {manualFilters.map((filter, index) => {
                 const column = columns.find(col => col.column_name === filter.column);
                 const availableOperators = column ? getOperatorsForDataType(column.data_type) : ['equals'];
                 const needsValue = !['is_null', 'is_not_null'].includes(filter.operator);
 
                 return (
-                  <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Column</Label>
-                      <Select
-                        value={filter.column}
-                        onValueChange={(value) => updateFilter(index, { column: value })}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {columns.map(col => (
-                            <SelectItem key={col.column_name} value={col.column_name}>
-                              <div className="flex items-center gap-2">
-                                <span>{col.column_name}</span>
-                                <Badge variant="secondary" className="text-xs">
-                                  {col.data_type}
-                                </Badge>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div key={index} className="space-y-3 p-3 bg-white rounded-md border">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Column</Label>
+                        <Select
+                          value={filter.column}
+                          onValueChange={(value) => updateFilter(index, { column: value })}
+                        >
+                          <SelectTrigger className="h-10 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {columns.map(col => (
+                              <SelectItem key={col.column_name} value={col.column_name}>
+                                <div className="flex items-center gap-2">
+                                  <span className="truncate">{col.column_name}</span>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {col.data_type}
+                                  </Badge>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">Operator</Label>
-                      <Select
-                        value={filter.operator}
-                        onValueChange={(value) => updateFilter(index, { 
-                          operator: value as FilterCondition['operator'],
-                          value: ['is_null', 'is_not_null'].includes(value) ? undefined : filter.value
-                        })}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableOperators.map(op => (
-                            <SelectItem key={op} value={op}>
-                              {OPERATOR_LABELS[op as keyof typeof OPERATOR_LABELS]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Operator</Label>
+                        <Select
+                          value={filter.operator}
+                          onValueChange={(value) => updateFilter(index, { 
+                            operator: value as FilterCondition['operator'],
+                            value: ['is_null', 'is_not_null'].includes(value) ? undefined : filter.value
+                          })}
+                        >
+                          <SelectTrigger className="h-10 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableOperators.map(op => (
+                              <SelectItem key={op} value={op}>
+                                {OPERATOR_LABELS[op as keyof typeof OPERATOR_LABELS]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">Value</Label>
-                      <Input
-                        placeholder={needsValue ? "Enter value..." : "N/A"}
-                        value={filter.value || ''}
-                        onChange={(e) => updateFilter(index, { value: e.target.value })}
-                        disabled={!needsValue || isLoading}
-                        className="h-8 text-xs"
-                      />
-                    </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Value</Label>
+                        <Input
+                          placeholder={needsValue ? "Enter value..." : "N/A"}
+                          value={filter.value || ''}
+                          onChange={(e) => updateFilter(index, { value: e.target.value })}
+                          disabled={!needsValue || isLoading}
+                          className="h-10 text-sm"
+                          autoComplete="off"
+                        />
+                      </div>
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeFilter(index)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium text-transparent">Remove</Label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeFilter(index)}
+                          className="h-10 w-10 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 );
               })}

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -70,9 +71,18 @@ function TableDataViewerComponent({ connectionId, tableName, schemaName }: Table
     // Avoid redundant updates and fetches if filters didn't actually change
     const filtersChanged = JSON.stringify(filters) !== JSON.stringify(newFilters);
     if (!filtersChanged) return;
-    setFilters(newFilters);
+    
+    // Filter out empty filters that don't have values
+    const validFilters = newFilters.filter(filter => {
+      if (['is_null', 'is_not_null'].includes(filter.operator)) {
+        return true; // These don't need values
+      }
+      return filter.value && filter.value.toString().trim() !== '';
+    });
+    
+    setFilters(validFilters);
     setCurrentPage(0);
-    fetchTableData(0, newFilters);
+    fetchTableData(0, validFilters);
   }, [filters, fetchTableData]);
 
   const nextPage = useCallback(() => {
@@ -245,15 +255,19 @@ function TableDataViewerComponent({ connectionId, tableName, schemaName }: Table
               {tableData.filteredCount !== undefined && tableData.filteredCount !== tableData.totalCount && (
                 <span className="text-blue-600"> (filtered from {tableData.totalCount} total)</span>
               )}
+              <div className="text-xs text-gray-500 mt-1">
+                💡 Scroll horizontally and vertically to view all data
+              </div>
             </CardDescription>
           </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
+          <div className="rounded-md border overflow-hidden relative">
+            <div className="overflow-auto max-h-[70vh] min-h-[400px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+              <Table>
+              <TableHeader className="sticky top-0 bg-white z-10">
                 <TableRow>
                   {tableData.columns.map((column) => (
-                    <TableHead key={column.column_name} className="min-w-[120px]">
+                    <TableHead key={column.column_name} className="min-w-[150px] max-w-[300px] bg-white border-b-2 sticky top-0">
                       <div className="space-y-1">
                         <div className="font-semibold">{column.column_name}</div>
                         <Badge 
@@ -276,47 +290,71 @@ function TableDataViewerComponent({ connectionId, tableName, schemaName }: Table
                       const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.columnName === column.column_name;
                       
                       return (
-                        <TableCell key={column.column_name} className="relative group">
+                        <TableCell key={column.column_name} className="relative group min-w-[150px] max-w-[300px]">
                           {isEditing ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                value={editingCell?.newValue || ''}
-                                onChange={(e) => handleCellChange(e.target.value)}
-                                onKeyDown={handleKeyPress}
-                                className="h-8 text-sm"
-                                autoFocus
-                              />
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={confirmSave}
-                                disabled={isSaving}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Save className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={cancelEdit}
-                                className="h-8 w-8 p-0"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                            <div className="space-y-6 p-6 bg-blue-50 border-2 border-blue-200 rounded-xl shadow-sm">
+                              <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm font-semibold text-blue-800">Editing:</span>
+                                  <Badge variant="secondary" className="text-xs px-2 py-1">
+                                    {column.data_type}
+                                  </Badge>
+                                </div>
+                                {column.data_type.includes('text') || 
+                                 (typeof editingCell?.newValue === 'string' && editingCell?.newValue.length > 50) ? (
+                                  <Textarea
+                                    value={editingCell?.newValue || ''}
+                                    onChange={(e) => handleCellChange(e.target.value)}
+                                    onKeyDown={handleKeyPress}
+                                    className="min-h-[120px] resize-none text-sm p-4"
+                                    placeholder="Enter value..."
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <Input
+                                    value={editingCell?.newValue || ''}
+                                    onChange={(e) => handleCellChange(e.target.value)}
+                                    onKeyDown={handleKeyPress}
+                                    className="h-12 text-sm px-4"
+                                    placeholder="Enter value..."
+                                    autoFocus
+                                  />
+                                )}
+                              </div>
+                              <div className="flex items-center gap-4 pt-2">
+                                <Button
+                                  size="sm"
+                                  onClick={confirmSave}
+                                  disabled={isSaving}
+                                  className="h-10 px-6 text-sm bg-green-600 hover:bg-green-700 text-white font-medium"
+                                >
+                                  <Save className="h-4 w-4 mr-2" />
+                                  {isSaving ? 'Saving...' : 'Save Changes'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={cancelEdit}
+                                  className="h-10 px-6 text-sm font-medium"
+                                >
+                                  <X className="h-4 w-4 mr-2" />
+                                  Cancel
+                                </Button>
+                              </div>
                             </div>
                           ) : (
                             <div
-                              className="cursor-pointer hover:bg-gray-50 p-1 rounded flex items-center justify-between group"
+                              className="cursor-pointer hover:bg-gray-50 p-4 rounded-lg flex items-center justify-between group transition-colors min-h-[48px]"
                               onClick={() => handleCellClick(rowIndex, column.column_name, cellValue)}
                             >
-                              <span className="truncate">
+                              <span className="truncate text-sm">
                                 {cellValue === null ? (
                                   <span className="text-gray-400 italic">NULL</span>
                                 ) : (
                                   cellValue?.toString() || ''
                                 )}
                               </span>
-                              <Edit3 className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              <Edit3 className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400" />
                             </div>
                           )}
                         </TableCell>
@@ -325,7 +363,8 @@ function TableDataViewerComponent({ connectionId, tableName, schemaName }: Table
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           </div>
 
           {/* Pagination */}
