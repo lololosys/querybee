@@ -1,4 +1,3 @@
-import { ConnectionOptions } from 'node:tls';
 import { Pool, Client } from 'pg';
 
 export interface DatabaseConnection {
@@ -42,10 +41,7 @@ export class DatabaseManager {
 
   async createConnection(connectionId: string, config: DatabaseConnection): Promise<boolean> {
     try {
-      const ssl = process.env.NODE_ENV === 'production' ? {ssl: {
-        rejectUnauthorized: false,
-      }} : undefined;
-
+    
       const pool = new Pool({
         host: config.host,
         port: config.port,
@@ -55,7 +51,9 @@ export class DatabaseManager {
         max: 20,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 10000,
-        ssl: ssl as boolean | ConnectionOptions | undefined,
+        ssl: {
+          rejectUnauthorized: false, 
+        },
       });
 
       // Test the connection
